@@ -1,15 +1,25 @@
 #include <pebble.h>
 
 static Window *s_window;
-static TextLayer *s_grid_layers[35]; // 7x5 grid = 35 numbers
+static TextLayer *s_grid_layers[30]; // 6x5 grid = 30 numbers
+static GRect s_grid_orig[30];
 static char s_time_text[5] = "0000"; // HHMM without colon
-static char s_grid_buffer[35][2];    // Buffers for all grid positions
+static char s_grid_buffer[30][2];    // Buffers for all grid positions
 static int s_animation_offset = 0;
+static AppTimer *s_animation_timer;
+static int8_t s_move_dx[30];
+static int8_t s_move_dy[30];
+static int8_t s_move_offset_x[30];
+static int8_t s_move_offset_y[30];
+static const int s_time_positions[4] = {13, 14, 15, 16};
 
 // Dark blue background, Light blue text
 // The background colour should be 0x07123f. The text colour should be 0x8ab6d6.
-#define DARK_BLUE GColorMidnightGreen
-#define LIGHT_BLUE GColorElectricBlue
+#define DARK_BLUE GColorCobaltBlue
+#define LIGHT_BLUE GColorCeleste
+// #define LIGHT_BLUE GColorElectricBlue
+
+#define ANIMATION_TICK 150
 
 static void prv_update_time(void)
 {
@@ -19,35 +29,65 @@ static void prv_update_time(void)
   // Format time as HHMM (no colon)
   strftime(s_time_text, sizeof(s_time_text), "%H%M", tick_time);
 
-  // Initialize all grid positions with animated numbers
-  for (int i = 0; i < 35; i++)
-  {
-    int digit_val = (i + s_animation_offset) % 10;
-    snprintf(s_grid_buffer[i], sizeof(s_grid_buffer[i]), "%d", digit_val);
-  }
-
-  // Place time digits in the middle positions (row 2, columns 2-5)
-  // With 7 columns (0-6), middle 4 are: columns 2, 3, 4, 5
-  // Row 2 positions: 2*7 + 2 = 16, 2*7 + 3 = 17, 2*7 + 4 = 18, 2*7 + 5 = 19
-  int time_positions[4] = {16, 17, 18, 19};
+  // Update only the time digits; keep the other numbers unchanged
   for (int i = 0; i < 4; i++)
   {
-    s_grid_buffer[time_positions[i]][0] = s_time_text[i];
-    s_grid_buffer[time_positions[i]][1] = '\0';
+    int pos = s_time_positions[i];
+    s_grid_buffer[pos][0] = s_time_text[i];
+    s_grid_buffer[pos][1] = '\0';
+    text_layer_set_text(s_grid_layers[pos], s_grid_buffer[pos]);
   }
 
-  // Update all grid layers
-  for (int i = 0; i < 35; i++)
+  // Animate every number around its center point without altering text
+  for (int i = 0; i < 30; i++)
   {
-    text_layer_set_text(s_grid_layers[i], s_grid_buffer[i]);
+    const int8_t max_offset = 5;
+    int8_t next_x = s_move_offset_x[i] + s_move_dx[i];
+    int8_t next_y = s_move_offset_y[i] + s_move_dy[i];
+    if (next_x > max_offset || next_x < -max_offset || next_y > max_offset || next_y < -max_offset)
+    {
+      // Choose a new random direction until it keeps the cell inside bounds.
+      do
+      {
+        s_move_dx[i] = (rand() % 3) - 1;
+        s_move_dy[i] = (rand() % 3) - 1;
+      } while (s_move_dx[i] == 0 && s_move_dy[i] == 0);
+
+      next_x = s_move_offset_x[i] + s_move_dx[i];
+      next_y = s_move_offset_y[i] + s_move_dy[i];
+      if (next_x > max_offset || next_x < -max_offset || next_y > max_offset || next_y < -max_offset)
+      {
+        // If the direction is invalid, reverse one axis to stay in bounds.
+        if (next_x > max_offset)
+          s_move_dx[i] = -1;
+        else if (next_x < -max_offset)
+          s_move_dx[i] = 1;
+        if (next_y > max_offset)
+          s_move_dy[i] = -1;
+        else if (next_y < -max_offset)
+          s_move_dy[i] = 1;
+
+        next_x = s_move_offset_x[i] + s_move_dx[i];
+        next_y = s_move_offset_y[i] + s_move_dy[i];
+      }
+    }
+
+    s_move_offset_x[i] = next_x;
+    s_move_offset_y[i] = next_y;
+    GRect moved_frame = GRect(s_grid_orig[i].origin.x + s_move_offset_x[i],
+                              s_grid_orig[i].origin.y + s_move_offset_y[i],
+                              s_grid_orig[i].size.w,
+                              s_grid_orig[i].size.h);
+    layer_set_frame(text_layer_get_layer(s_grid_layers[i]), moved_frame);
   }
 
-  s_animation_offset = (s_animation_offset + 1) % 10;
+  s_animation_offset = (s_animation_offset + 1) % 70;
 }
 
-static void prv_tick_handler(struct tm *tick_time, TimeUnits units_changed)
+static void prv_animation_timer_callback(void *context)
 {
   prv_update_time();
+  s_animation_timer = app_timer_register(ANIMATION_TICK, prv_animation_timer_callback, NULL);
 }
 
 static void prv_window_load(Window *window)
@@ -58,16 +98,13 @@ static void prv_window_load(Window *window)
   // Set window background to dark blue
   window_set_background_color(s_window, DARK_BLUE);
 
-  // Create a 7x5 grid of numbers, spaced to fill the entire screen
-  int cols = 7;
+  // Create a 6x5 grid of numbers, spaced to fill the screen with top padding
+  int cols = 6;
   int rows = 5;
-  int cell_width = bounds.size.w / cols;
-  int cell_height = bounds.size.h / rows;
   int start_x = 0;
-  int start_y = 0;
-
-  // Time positions for reference
-  int time_positions[4] = {16, 17, 18, 19};
+  int start_y = 8;
+  int cell_width = bounds.size.w / cols;
+  int cell_height = (bounds.size.h - start_y) / rows;
 
   int index = 0;
   for (int row = 0; row < rows; row++)
@@ -81,7 +118,7 @@ static void prv_window_load(Window *window)
       bool is_time_position = false;
       for (int i = 0; i < 4; i++)
       {
-        if (index == time_positions[i])
+        if (index == s_time_positions[i])
         {
           is_time_position = true;
           break;
@@ -96,6 +133,14 @@ static void prv_window_load(Window *window)
       }
 
       s_grid_layers[index] = text_layer_create(GRect(x, layer_y, cell_width, cell_height));
+      s_grid_orig[index] = GRect(x, layer_y, cell_width, cell_height);
+      s_move_offset_x[index] = 0;
+      s_move_offset_y[index] = 0;
+      do
+      {
+        s_move_dx[index] = (rand() % 3) - 1;
+        s_move_dy[index] = (rand() % 3) - 1;
+      } while (s_move_dx[index] == 0 && s_move_dy[index] == 0);
       text_layer_set_background_color(s_grid_layers[index], GColorClear);
       text_layer_set_text_color(s_grid_layers[index], LIGHT_BLUE);
       text_layer_set_text_alignment(s_grid_layers[index], GTextAlignmentCenter);
@@ -109,6 +154,10 @@ static void prv_window_load(Window *window)
       {
         text_layer_set_font(s_grid_layers[index], fonts_get_system_font(FONT_KEY_GOTHIC_18));
       }
+      int digit_val = ((index * 6) + 3) % 10;
+      s_grid_buffer[index][0] = '0' + digit_val;
+      s_grid_buffer[index][1] = '\0';
+      text_layer_set_text(s_grid_layers[index], s_grid_buffer[index]);
 
       layer_add_child(window_layer, text_layer_get_layer(s_grid_layers[index]));
       index++;
@@ -121,7 +170,7 @@ static void prv_window_load(Window *window)
 
 static void prv_window_unload(Window *window)
 {
-  for (int i = 0; i < 35; i++)
+  for (int i = 0; i < 30; i++)
   {
     text_layer_destroy(s_grid_layers[i]);
   }
@@ -129,14 +178,15 @@ static void prv_window_unload(Window *window)
 
 static void prv_init(void)
 {
+  srand((unsigned int)time(NULL));
   s_window = window_create();
   window_set_window_handlers(s_window, (WindowHandlers){
                                            .load = prv_window_load,
                                            .unload = prv_window_unload,
                                        });
 
-  // Subscribe to second ticks for animation movement
-  tick_timer_service_subscribe(SECOND_UNIT, prv_tick_handler);
+  // Start the fast animation timer
+  s_animation_timer = app_timer_register(ANIMATION_TICK, prv_animation_timer_callback, NULL);
 
   const bool animated = true;
   window_stack_push(s_window, animated);
@@ -144,7 +194,11 @@ static void prv_init(void)
 
 static void prv_deinit(void)
 {
-  tick_timer_service_unsubscribe();
+  if (s_animation_timer)
+  {
+    app_timer_cancel(s_animation_timer);
+    s_animation_timer = NULL;
+  }
   window_destroy(s_window);
 }
 
