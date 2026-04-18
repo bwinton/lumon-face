@@ -13,16 +13,21 @@ static void prv_click_config_provider(void *context);
 
 static Window *s_window;
 
-static void prv_select_click_handler(ClickRecognizerRef recognizer, void *context) {
-    if (!logo_is_showing()) {
-        logo_show();
-    } else {
-        logo_hide();
-    }
+static void prv_select_click_handler(ClickRecognizerRef recognizer, void *context)
+{
+  if (!logo_is_showing())
+  {
+    logo_show();
+  }
+  else
+  {
+    logo_hide();
+  }
 }
 
-static void prv_click_config_provider(void *context) {
-    window_single_click_subscribe(BUTTON_ID_SELECT, prv_select_click_handler);
+static void prv_click_config_provider(void *context)
+{
+  window_single_click_subscribe(BUTTON_ID_SELECT, prv_select_click_handler);
 }
 
 static void prv_window_load(Window *window)
