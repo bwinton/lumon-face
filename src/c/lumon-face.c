@@ -1,23 +1,23 @@
 #include <pebble.h>
 #include "grid_motion.h"
 #include "minute_transition.h"
+#include "constants.h"
+
+// Grid configuration
+#define GRID_START_Y 8
+
+// Animation timing
+#define ANIMATION_TICK 150
 
 static Window *s_window;
-static TextLayer *s_grid_layers[30]; // 6x5 grid = 30 numbers
-static GRect s_grid_orig[30];
+static TextLayer *s_grid_layers[GRID_COUNT]; // 6x5 grid = 30 numbers
+static GRect s_grid_orig[GRID_COUNT];
 static char s_time_text[5] = "0000"; // HHMM without colon
-static char s_grid_buffer[30][2];    // Buffers for all grid positions
+static char s_grid_buffer[GRID_COUNT][2];    // Buffers for all grid positions
 static int s_animation_offset = 0;
 static AppTimer *s_animation_timer;
-static const int s_time_positions[4] = {13, 14, 15, 16};
 static int s_cell_width = 0;
 static int s_cell_height = 0;
-
-// Dark blue background, Light blue text
-#define DARK_BLUE GColorCobaltBlue
-#define LIGHT_BLUE GColorCeleste
-
-#define ANIMATION_TICK 150
 
 static void prv_update_time(void)
 {
@@ -32,7 +32,7 @@ static void prv_update_time(void)
   // Update only the time digits when the transition is not active.
   for (int i = 0; i < 4; i++)
   {
-    int pos = s_time_positions[i];
+    int pos = TIME_POSITIONS[i];
     if (minute_transition_active())
     {
       continue;
@@ -64,10 +64,10 @@ static void prv_window_load(Window *window)
   window_set_background_color(s_window, DARK_BLUE);
 
   // Create a 6x5 grid of numbers, spaced to fill the screen with top padding
-  int cols = 6;
-  int rows = 5;
+  int cols = GRID_COLS;
+  int rows = GRID_ROWS;
   int start_x = 0;
-  int start_y = 8;
+  int start_y = GRID_START_Y;
   int cell_width = bounds.size.w / cols;
   int cell_height = (bounds.size.h - start_y) / rows;
   s_cell_width = cell_width;
@@ -87,7 +87,7 @@ static void prv_window_load(Window *window)
       bool is_time_position = false;
       for (int i = 0; i < 4; i++)
       {
-        if (index == s_time_positions[i])
+        if (index == TIME_POSITIONS[i])
         {
           is_time_position = true;
           break;
@@ -126,7 +126,7 @@ static void prv_window_load(Window *window)
     }
   }
 
-  grid_motion_init(s_grid_layers, s_grid_orig, s_time_positions, 4);
+  grid_motion_init(s_grid_layers, s_grid_orig, TIME_POSITIONS, 4);
   minute_transition_add_children(window_layer);
 
   // Update time immediately
@@ -135,7 +135,7 @@ static void prv_window_load(Window *window)
 
 static void prv_window_unload(Window *window)
 {
-  for (int i = 0; i < 30; i++)
+  for (int i = 0; i < GRID_COUNT; i++)
   {
     text_layer_destroy(s_grid_layers[i]);
   }
