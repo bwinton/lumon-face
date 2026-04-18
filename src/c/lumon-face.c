@@ -1,6 +1,7 @@
 #include <pebble.h>
 #include "grid_motion.h"
 #include "minute_transition.h"
+#include "logo_screen.h"
 #include "constants.h"
 
 // Grid configuration
@@ -8,6 +9,11 @@
 
 // Animation timing
 #define ANIMATION_TICK 150
+
+static void prv_update_time(void);
+static void prv_animation_timer_callback(void *context);
+static void prv_select_click_handler(ClickRecognizerRef recognizer, void *context);
+static void prv_click_config_provider(void *context);
 
 static Window *s_window;
 static TextLayer *s_grid_layers[GRID_COUNT]; // 6x5 grid = 30 numbers
@@ -18,6 +24,7 @@ static int s_animation_offset = 0;
 static AppTimer *s_animation_timer;
 static int s_cell_width = 0;
 static int s_cell_height = 0;
+static bool s_showing_logo = false;
 
 static void prv_update_time(void)
 {
@@ -47,6 +54,18 @@ static void prv_update_time(void)
 
   minute_transition_update_animation(s_grid_layers, s_grid_orig);
   s_animation_offset = (s_animation_offset + 1) % 70;
+}
+
+static void prv_select_click_handler(ClickRecognizerRef recognizer, void *context) {
+    if (!logo_is_showing()) {
+        logo_show();
+    } else {
+        logo_hide();
+    }
+}
+
+static void prv_click_config_provider(void *context) {
+    window_single_click_subscribe(BUTTON_ID_SELECT, prv_select_click_handler);
 }
 
 static void prv_animation_timer_callback(void *context)
@@ -129,6 +148,9 @@ static void prv_window_load(Window *window)
   grid_motion_init(s_grid_layers, s_grid_orig, TIME_POSITIONS, 4);
   minute_transition_add_children(window_layer);
 
+  // Set up button handling
+  window_set_click_config_provider(s_window, prv_click_config_provider);
+
   // Update time immediately
   prv_update_time();
 }
@@ -147,6 +169,7 @@ static void prv_init(void)
 {
   srand((unsigned int)time(NULL));
   s_window = window_create();
+  logo_init();
   window_set_window_handlers(s_window, (WindowHandlers){
                                            .load = prv_window_load,
                                            .unload = prv_window_unload,
@@ -166,6 +189,7 @@ static void prv_deinit(void)
     app_timer_cancel(s_animation_timer);
     s_animation_timer = NULL;
   }
+  logo_deinit();
   window_destroy(s_window);
 }
 
