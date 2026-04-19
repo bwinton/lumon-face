@@ -7,16 +7,20 @@
 #define NUM_ELLIPSES 3
 #define NUM_POINTS 40 // Number of points for the polyline
 
-static const struct
+// Constants for the width ratios of the second and third ellipses
+#define SECOND_ELLIPSE_WIDTH_RATIO 0.70f // 70% width of the first ellipse
+#define THIRD_ELLIPSE_WIDTH_RATIO 0.35f  // 35% width of the first ellipse
+
+static struct
 {
   int w;
   int h;
 } s_ellipses[NUM_ELLIPSES] = {
-    {180, 84},
-    {142, 84},
-    {70, 84}};
+    {180, 84}, // First ellipse: width = 180, height = 84
+    {0, 0},    // Second ellipse: width to be calculated
+    {0, 0}};   // Third ellipse: width to be calculated
 
-static GPoint s_center = {100, 84};
+static GPoint s_center = {0, 0}; // Initial center point
 
 static AppTimer *s_logo_timer;
 static int32_t s_t = 0;
@@ -43,13 +47,6 @@ static void draw_thick_line(GContext *ctx, GPoint a, GPoint b)
 
   // central line
   graphics_draw_line(ctx, a, b);
-
-  // normalize perpendicular (approx)
-  APP_LOG(APP_LOG_LEVEL_DEBUG, "    Drawing line from (%d,%d) to (%d,%d)", a.x, a.y, b.x, b.y);
-
-  graphics_draw_line(ctx,
-                     GPoint(a.x, a.y),
-                     GPoint(b.x, b.y));
 }
 
 // ---------- parametric ellipse ----------
@@ -130,11 +127,6 @@ static void draw_line(GContext *ctx, GPoint start, GPoint end, int32_t t)
 static void layer_update_proc(Layer *layer, GContext *ctx)
 {
   int32_t next_t = s_t + STEP;
-
-  if (s_logo_timer)
-  {
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "  stage: %d, angle: %d", s_stage, next_t);
-  }
 
   if (s_stage < NUM_ELLIPSES)
   {
@@ -261,6 +253,29 @@ void start_logo_animation(Layer *layer)
     app_timer_cancel(s_logo_timer);
     s_logo_timer = NULL;
   }
+
+  // Set the ellipse sizes based on screen size (for scaling)
+  GRect bounds = layer_get_bounds(layer);
+  int screen_width = bounds.size.w;
+  int screen_height = bounds.size.h;
+
+  // Calculate the first ellipse dimensions
+  int new_width = screen_width * 0.90;
+  float ratio = (float)screen_width / s_ellipses[0].w;
+  int new_height = s_ellipses[0].h * ratio;
+
+  s_ellipses[0].w = new_width; // 90% width of the screen
+  s_ellipses[0].h = new_height;
+
+  // Calculate the second and third ellipse widths
+  s_ellipses[1].w = s_ellipses[0].w * SECOND_ELLIPSE_WIDTH_RATIO;
+  s_ellipses[1].h = new_height;
+  s_ellipses[2].w = s_ellipses[0].w * THIRD_ELLIPSE_WIDTH_RATIO;
+  s_ellipses[2].h = new_height;
+
+  s_center.x = screen_width / 2;
+  s_center.y = screen_height / 10 + new_height / 2;
+
   layer_set_update_proc(layer, layer_update_proc);
   s_logo_timer = app_timer_register(TIMER_MS, set_dirty, layer);
 }
