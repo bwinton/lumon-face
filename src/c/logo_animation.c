@@ -11,14 +11,16 @@
 #define SECOND_ELLIPSE_WIDTH_RATIO 0.70f // 70% width of the first ellipse
 #define THIRD_ELLIPSE_WIDTH_RATIO 0.35f  // 35% width of the first ellipse
 
+static void (*s_complete_callback)(void *) = NULL;
+static void *s_callback_context = NULL;
 static struct
 {
   int w;
   int h;
 } s_ellipses[NUM_ELLIPSES] = {
-    {180, 84}, // First ellipse: width = 180, height = 84
-    {0, 0},    // Second ellipse: width to be calculated
-    {0, 0}};   // Third ellipse: width to be calculated
+    {0, 0},  // First ellipse: width = 180, height = 84
+    {0, 0},  // Second ellipse: width to be calculated
+    {0, 0}}; // Third ellipse: width to be calculated
 
 static GPoint s_center = {0, 0}; // Initial center point
 
@@ -70,16 +72,6 @@ static GPoint line_point(GPoint start, GPoint end, int32_t t)
 }
 
 // ---------- geometry helpers ----------
-static GPoint ellipse_left_edge(int w)
-{
-  return GPoint(s_center.x - w / 2, s_center.y);
-}
-
-static GPoint ellipse_right_edge(int w)
-{
-  return GPoint(s_center.x + w / 2, s_center.y);
-}
-
 // Function to generate points for an ellipse
 static void generate_ellipse_points(int w, int h, GPoint points[NUM_POINTS])
 {
@@ -121,6 +113,12 @@ static void draw_line(GContext *ctx, GPoint start, GPoint end, int32_t t)
 {
   GPoint current = line_point(start, end, t);
   draw_thick_line(ctx, start, current);
+}
+
+void logo_animation_set_complete_callback(void (*callback)(void *), void *context)
+{
+  s_complete_callback = callback;
+  s_callback_context = context;
 }
 
 // ---------- animation step ----------
@@ -231,7 +229,67 @@ static void layer_update_proc(Layer *layer, GContext *ctx)
   else
   {
     s_logo_timer = NULL;
+    if (s_complete_callback)
+    {
+      s_complete_callback(s_callback_context);
+      s_complete_callback = NULL;
+    }
   }
+}
+
+static void static_layer_update_proc(Layer *layer, GContext *ctx)
+{
+  // --- Setup bounds and scaling (same as start_logo_animation) ---
+  GRect bounds = layer_get_bounds(layer);
+  int screen_width = bounds.size.w;
+  int screen_height = bounds.size.h;
+
+  int new_width = screen_width * 0.90;
+  float ratio = (float)screen_width / 180;
+  int new_height = 84 * ratio;
+
+  s_ellipses[0].w = new_width;
+  s_ellipses[0].h = new_height;
+
+  s_ellipses[1].w = s_ellipses[0].w * SECOND_ELLIPSE_WIDTH_RATIO;
+  s_ellipses[1].h = new_height;
+
+  s_ellipses[2].w = s_ellipses[0].w * THIRD_ELLIPSE_WIDTH_RATIO;
+  s_ellipses[2].h = new_height;
+
+  s_center.x = screen_width / 2;
+  s_center.y = screen_height / 10 + new_height / 2;
+
+  // --- Generate and draw all ellipses ---
+  for (int i = 0; i < NUM_ELLIPSES; i++)
+  {
+    generate_ellipse_points(s_ellipses[i].w, s_ellipses[i].h, s_ellipse_points[i]);
+
+    GPath *path = create_ellipse_path(s_ellipse_points[i]);
+    draw_ellipse_path(ctx, path);
+
+    // store if needed later
+    s_ellipse_paths[i] = path;
+  }
+
+  // --- Compute final line positions (same logic as animation) ---
+  s_line_start = s_ellipse_paths[0]->points[(int)(0.15 * NUM_POINTS)];
+  s_line_end = s_ellipse_paths[0]->points[(int)(0.85 * NUM_POINTS)];
+  s_line_end.x += 2;
+
+  s_line2_start = s_ellipse_paths[0]->points[(int)(0.325 * NUM_POINTS)];
+  s_line2_end = s_ellipse_paths[0]->points[(int)(0.675 * NUM_POINTS)];
+  s_line2_end.x += 1;
+
+  // --- Draw both lines fully (no animation) ---
+  draw_thick_line(ctx, s_line_start, s_line_end);
+  draw_thick_line(ctx, s_line2_start, s_line2_end);
+}
+
+void draw_logo_static(Layer *layer)
+{
+  layer_set_update_proc(layer, static_layer_update_proc);
+  layer_mark_dirty(layer);
 }
 
 // ---------- start ----------
@@ -261,8 +319,8 @@ void start_logo_animation(Layer *layer)
 
   // Calculate the first ellipse dimensions
   int new_width = screen_width * 0.90;
-  float ratio = (float)screen_width / s_ellipses[0].w;
-  int new_height = s_ellipses[0].h * ratio;
+  float ratio = (float)screen_width / 180;
+  int new_height = 84 * ratio;
 
   s_ellipses[0].w = new_width; // 90% width of the screen
   s_ellipses[0].h = new_height;
@@ -291,5 +349,10 @@ void stop_logo_animation()
   {
     app_timer_cancel(s_logo_timer);
     s_logo_timer = NULL;
+  }
+
+  if (s_complete_callback)
+  {
+    s_complete_callback = NULL;
   }
 }

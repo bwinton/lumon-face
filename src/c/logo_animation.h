@@ -9,3 +9,6 @@
  */
 void start_logo_animation(Layer *layer);
 void stop_logo_animation();
+
+void logo_animation_set_complete_callback(void (*callback)(void *), void *context);
+void draw_logo_static(Layer *layer);
