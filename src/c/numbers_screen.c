@@ -1,6 +1,7 @@
 #include "numbers_screen.h"
 #include "grid_motion.h"
 #include "minute_transition.h"
+#include "settings.h"
 #include "constants.h"
 #include <pebble.h>
 
@@ -9,6 +10,7 @@
 
 // Animation timing
 #define ANIMATION_TICK 150
+#define LOW_POWER_TICK 1000
 
 static TextLayer *s_grid_layers[GRID_COUNT];
 static GRect s_grid_orig[GRID_COUNT];
@@ -43,16 +45,65 @@ static void prv_update_time(void)
     }
 
     // Animate every number around its center point without altering text.
-    grid_motion_update(minute_transition_active());
+    if (!settings_low_power_mode())
+    {
+        grid_motion_update(minute_transition_active());
+    }
 
     minute_transition_update_animation(s_grid_layers, s_grid_orig);
     s_animation_offset = (s_animation_offset + 1) % 70;
 }
 
+static int prv_get_low_power_delay(void)
+{
+    time_t now = time(NULL);
+    struct tm *tick_time = localtime(&now);
+    int delay_seconds = 60 - tick_time->tm_sec;
+    if (delay_seconds <= 0)
+    {
+        delay_seconds = 60;
+    }
+    return delay_seconds * 1000;
+}
+
+static int prv_get_timer_interval(void)
+{
+    if (minute_transition_active())
+    {
+        return ANIMATION_TICK;
+    }
+    if (settings_low_power_mode())
+    {
+        return prv_get_low_power_delay();
+    }
+    return ANIMATION_TICK;
+}
+
+static void prv_animation_timer_callback(void *context);
+
+static void prv_restart_timer(void)
+{
+    if (s_animation_timer)
+    {
+        app_timer_cancel(s_animation_timer);
+        s_animation_timer = NULL;
+    }
+    s_animation_timer = app_timer_register(prv_get_timer_interval(), prv_animation_timer_callback, NULL);
+}
+
 static void prv_animation_timer_callback(void *context)
 {
     prv_update_time();
-    s_animation_timer = app_timer_register(ANIMATION_TICK, prv_animation_timer_callback, NULL);
+    prv_restart_timer();
+}
+
+static void prv_low_power_mode_changed(void *context)
+{
+    if (!settings_low_power_mode())
+    {
+        prv_update_time();
+    }
+    prv_restart_timer();
 }
 
 void numbers_screen_init(GRect bounds)
@@ -121,8 +172,10 @@ void numbers_screen_init(GRect bounds)
 
     grid_motion_init(s_grid_layers, s_grid_orig, TIME_POSITIONS, 4);
 
+    settings_register_low_power_changed_handler(prv_low_power_mode_changed, NULL);
+
     // Start the animation timer
-    s_animation_timer = app_timer_register(ANIMATION_TICK, prv_animation_timer_callback, NULL);
+    prv_restart_timer();
 }
 
 void numbers_screen_add_children(Layer *window_layer)
@@ -136,6 +189,7 @@ void numbers_screen_add_children(Layer *window_layer)
 
 void numbers_screen_deinit(void)
 {
+    settings_unregister_low_power_changed_handler();
     if (s_animation_timer)
     {
         app_timer_cancel(s_animation_timer);

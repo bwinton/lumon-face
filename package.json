@@ -2,9 +2,13 @@
   "name": "lumon-face",
   "author": "MakeAwesomeHappen",
   "version": "1.0.0",
-  "keywords": ["pebble-app"],
+  "keywords": [
+    "pebble-app"
+  ],
   "private": true,
-  "dependencies": {},
+  "dependencies": {
+    "@rebble/clay": "^1.0.10"
+  },
   "pebble": {
     "displayName": "lumon-face",
     "uuid": "94073c07-a039-40cf-8a2d-b05d9b16d6dc",
@@ -22,9 +26,12 @@
     "watchapp": {
       "watchface": false
     },
-    "messageKeys": [
-      "dummy"
+    "capabilities": [
+      "configurable"
     ],
+    "messageKeys": {
+      "LowPowerMode": 1
+    },
     "resources": {
       "media": []
     }

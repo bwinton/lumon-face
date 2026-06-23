@@ -3,6 +3,7 @@
 #include "minute_transition.h"
 #include "logo_screen.h"
 #include "numbers_screen.h"
+#include "settings.h"
 #include "constants.h"
 
 // Animation timing
@@ -54,6 +55,7 @@ static void prv_window_unload(Window *window)
 static void prv_init(void)
 {
   srand((unsigned int)time(NULL));
+  settings_init();
   s_window = window_create();
   logo_init();
   window_set_window_handlers(s_window, (WindowHandlers){
@@ -67,6 +69,7 @@ static void prv_init(void)
 
 static void prv_deinit(void)
 {
+  settings_deinit();
   logo_deinit();
   window_destroy(s_window);
 }
