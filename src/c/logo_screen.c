@@ -245,25 +245,6 @@ static void animation_complete(void *context)
     show_current_screen();
 }
 
-static void select_click_handler(ClickRecognizerRef recognizer, void *context)
-{
-    s_current_screen = get_next_valid_screen(s_current_screen);
-    show_current_screen();
-}
-
-// Long press = jump backwards (quick navigation)
-static void select_long_click_handler(ClickRecognizerRef recognizer, void *context)
-{
-    s_current_screen = get_prev_valid_screen(s_current_screen);
-    show_current_screen();
-}
-
-static void click_config_provider(void *context)
-{
-    window_single_click_subscribe(BUTTON_ID_SELECT, select_click_handler);
-    window_long_click_subscribe(BUTTON_ID_SELECT, 500, select_long_click_handler, NULL);
-}
-
 // ---------- Window ----------
 static void prv_window_load(Window *window)
 {
@@ -353,7 +334,6 @@ static void prv_window_unload(Window *window)
 void logo_init(void)
 {
     s_logo_window = window_create();
-    window_set_click_config_provider(s_logo_window, click_config_provider);
 
     window_set_window_handlers(s_logo_window, (WindowHandlers){
                                                   .load = prv_window_load,

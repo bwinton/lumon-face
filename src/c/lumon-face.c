@@ -8,14 +8,43 @@
 
 // Animation timing
 #define ANIMATION_TICK 150
+#define DOUBLE_TAP_TIMEOUT_MS 1000
 
-static void prv_select_click_handler(ClickRecognizerRef recognizer, void *context);
-static void prv_click_config_provider(void *context);
+static void prv_accel_tap_handler(AccelAxisType axis, int32_t direction);
+static void prv_double_tap_timeout(void *context);
 
 static Window *s_window;
+static AppTimer *s_double_tap_timer = NULL;
+static bool s_double_tap_pending = false;
 
-static void prv_select_click_handler(ClickRecognizerRef recognizer, void *context)
+static void prv_double_tap_timeout(void *context)
 {
+  s_double_tap_pending = false;
+  s_double_tap_timer = NULL;
+}
+
+static void prv_accel_tap_handler(AccelAxisType axis, int32_t direction)
+{
+  APP_LOG(APP_LOG_LEVEL_INFO, "1 - Got tap, double? %d, direction: %d", s_double_tap_pending, direction);
+
+  if (!s_double_tap_pending)
+  {
+    s_double_tap_pending = true;
+    s_double_tap_timer = app_timer_register(DOUBLE_TAP_TIMEOUT_MS, prv_double_tap_timeout, NULL);
+    return;
+  }
+
+  APP_LOG(APP_LOG_LEVEL_INFO, "2 - Got tap, double? %d, direction: %d", s_double_tap_pending, direction);
+
+  s_double_tap_pending = false;
+  if (s_double_tap_timer)
+  {
+    app_timer_cancel(s_double_tap_timer);
+    s_double_tap_timer = NULL;
+  }
+
+  APP_LOG(APP_LOG_LEVEL_INFO, "Got tap, Showing logo? %d", logo_is_showing());
+
   if (!logo_is_showing())
   {
     logo_show();
@@ -24,11 +53,7 @@ static void prv_select_click_handler(ClickRecognizerRef recognizer, void *contex
   {
     logo_hide();
   }
-}
-
-static void prv_click_config_provider(void *context)
-{
-  window_single_click_subscribe(BUTTON_ID_SELECT, prv_select_click_handler);
+  APP_LOG(APP_LOG_LEVEL_INFO, "Got tap, Done");
 }
 
 static void prv_window_load(Window *window)
@@ -42,9 +67,6 @@ static void prv_window_load(Window *window)
   // Initialize the numbers screen
   numbers_screen_init(bounds);
   numbers_screen_add_children(window_layer);
-
-  // Set up button handling
-  window_set_click_config_provider(s_window, prv_click_config_provider);
 }
 
 static void prv_window_unload(Window *window)
@@ -63,12 +85,20 @@ static void prv_init(void)
                                            .unload = prv_window_unload,
                                        });
 
+  accel_tap_service_subscribe(prv_accel_tap_handler);
+
   const bool animated = true;
   window_stack_push(s_window, animated);
 }
 
 static void prv_deinit(void)
 {
+  accel_tap_service_unsubscribe();
+  if (s_double_tap_timer)
+  {
+    app_timer_cancel(s_double_tap_timer);
+    s_double_tap_timer = NULL;
+  }
   settings_deinit();
   logo_deinit();
   window_destroy(s_window);

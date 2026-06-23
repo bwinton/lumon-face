@@ -24,7 +24,7 @@
       "gabbro"
     ],
     "watchapp": {
-      "watchface": false
+      "watchface": true
     },
     "capabilities": [
       "configurable"
